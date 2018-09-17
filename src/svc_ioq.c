@@ -66,6 +66,7 @@
 #include <misc/opr.h>
 #include "svc_ioq.h"
 
+<<<<<<< HEAD
 /* Send queues, configurable using RPC_Ioq_ThrdMax
  *
  * Ideally, these would be some variant of weighted fair queuing.  Currently,
@@ -112,6 +113,16 @@ svc_ioq_init(void)
 		TAILQ_INIT(&ifph->qh);
 		mutex_init(&ifph->qmutex, NULL);
 	}
+=======
+static inline void
+cfconn_set_dead(SVCXPRT *xprt)
+{
+	struct svc_vc_xprt *xd = VC_DR(REC_XPRT(xprt));
+
+	mutex_lock(&xprt->xp_lock);
+	xd->sx.strm_stat = XPRT_DIED;
+	mutex_unlock(&xprt->xp_lock);
+>>>>>>> 7c08dfe... Make a send queue for each socket
 }
 
 #define LAST_FRAG ((u_int32_t)(1 << 31))
@@ -264,7 +275,7 @@ svc_ioq_write_callback(struct work_pool_entry *wpe)
 {
 	struct xdr_ioq *xioq = opr_containerof(wpe, struct xdr_ioq, ioq_wpe);
 	SVCXPRT *xprt = (SVCXPRT *)xioq->xdrs[0].x_lib[1];
-	struct poolq_head *ifph = &ioq_ifqh[svc_ioq_mask(xprt->xp_fd)];
+	struct poolq_head *ifph = &xprt->sendq;
 
 	svc_ioq_write(xprt, xioq, ifph);
 }
@@ -272,7 +283,7 @@ svc_ioq_write_callback(struct work_pool_entry *wpe)
 void
 svc_ioq_write_now(SVCXPRT *xprt, struct xdr_ioq *xioq)
 {
-	struct poolq_head *ifph = &ioq_ifqh[svc_ioq_mask(xprt->xp_fd)];
+	struct poolq_head *ifph = &xprt->sendq;
 
 	SVC_REF(xprt, SVC_REF_FLAG_NONE);
 	mutex_lock(&ifph->qmutex);
@@ -301,7 +312,7 @@ svc_ioq_write_now(SVCXPRT *xprt, struct xdr_ioq *xioq)
 void
 svc_ioq_write_submit(SVCXPRT *xprt, struct xdr_ioq *xioq)
 {
-	struct poolq_head *ifph = &ioq_ifqh[svc_ioq_mask(xprt->xp_fd)];
+	struct poolq_head *ifph = &xprt->sendq;
 
 	SVC_REF(xprt, SVC_REF_FLAG_NONE);
 	mutex_lock(&ifph->qmutex);

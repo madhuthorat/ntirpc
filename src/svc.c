@@ -188,6 +188,7 @@ svc_init(svc_init_params *params)
 	if (work_pool_params.thrd_max < work_pool_params.thrd_min)
 		work_pool_params.thrd_max = work_pool_params.thrd_min;
 
+<<<<<<< HEAD
 	svc_ioq_init();
 	if (work_pool_init(&svc_work_pool, "svc_", &work_pool_params)) {
 		mutex_unlock(&__svc_params->mtx);
@@ -198,6 +199,9 @@ svc_init(svc_init_params *params)
 	svc_rqst_init(channels);
 
 	if (svc_xprt_init()) {
+=======
+	if (svc_work_pool_init()) {
+>>>>>>> 7c08dfe... Make a send queue for each socket
 		mutex_unlock(&__svc_params->mtx);
 		return false;
 	}

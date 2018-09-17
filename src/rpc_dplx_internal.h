@@ -110,6 +110,7 @@ rpc_dplx_rec_init(struct rpc_dplx_rec *rec)
 	mutex_init(&rec->xprt.xp_lock, NULL);
 	/* Stop this xprt being cleaned immediately */
 	(void)clock_gettime(CLOCK_MONOTONIC_FAST, &(rec->recv.ts));
+	poolq_head_setup(&rec->xprt.sendq);
 
 	rec->xprt.xp_refcnt = 1;
 }

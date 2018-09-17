@@ -108,6 +108,7 @@ svc_rdma_rendezvous(SVCXPRT *xprt)
 		return (XPRT_DESTROYED);
 	}
 
+<<<<<<< HEAD
 	SVC_REF(xprt, SVC_REF_FLAG_NONE);
 	xd->sm_dr.xprt.xp_parent = xprt;
 	if (xprt->xp_dispatch.rendezvous_cb(&xd->sm_dr.xprt)
@@ -116,6 +117,17 @@ svc_rdma_rendezvous(SVCXPRT *xprt)
 		return (XPRT_DESTROYED);
 	}
 	return (XPRT_IDLE);
+=======
+	poolq_head_setup(&xprt->xprt.sendq);
+
+	return (&xprt->xprt);
+
+freedata:
+	mem_free(sm, sizeof (*sm));
+	xprt->xprt.xp_p2 = NULL;
+	svc_rqst_xprt_unregister(&xprt->xprt);
+	return (NULL);
+>>>>>>> 7c08dfe... Make a send queue for each socket
 }
 
 /*ARGSUSED*/

@@ -585,7 +585,9 @@ _svcauth_gss(struct svc_req *req, bool *no_dispatch)
 					gd->flags |= SVC_RPC_GSS_FLAG_MSPAC;
 				}
 
-				(void)authgss_ctx_hash_set(gd);
+				if (authgss_ctx_hash_set(gd) == NULL) {
+					__warnx(TIRPC_DEBUG_FLAG_SVC, "ML: authgss_ctx_hash_set(gd) returned NULL");
+				}
 			}
 		}
 		break;

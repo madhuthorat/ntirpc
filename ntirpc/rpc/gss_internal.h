@@ -37,6 +37,7 @@
 #include <misc/queue.h>
 #include <misc/abstract_atomic.h>
 #include <intrinsic.h>
+#include <execinfo.h>
 
 #ifdef HAVE_HEIMDAL
 #include <gssapi.h>
@@ -112,6 +113,33 @@ svc_rpc_gss_data *alloc_svc_rpc_gss_data(void)
 	return (gd);
 }
 
+static pthread_rwlock_t ntirpc_log_rwlock = PTHREAD_RWLOCK_INITIALIZER;
+
+static inline void ntirpc_gsh_backtrace(void)
+{
+#define MAX_STACK_DEPTH         32      /* enough ? */
+        void *buffer[MAX_STACK_DEPTH];
+        char **traces;
+        int i, nlines;
+
+        nlines = backtrace(buffer, MAX_STACK_DEPTH);
+
+	__warnx(TIRPC_DEBUG_FLAG_SVC, "ML: stack backtrace follows:");
+
+	rwlock_rdlock(&ntirpc_log_rwlock);
+        /* No file based logging, hope malloc call inside
+         * backtrace_symbols() doesn't hang!
+         */
+        traces = backtrace_symbols(buffer, nlines);
+        if (traces) {
+		for (i = 0; i < nlines; i++) {
+			__warnx(TIRPC_DEBUG_FLAG_SVC, "%s", traces[i]);
+			}
+                free(traces);
+        }
+	rwlock_unlock(&ntirpc_log_rwlock);
+}
+
 static inline void
 unref_svc_rpc_gss_data(struct svc_rpc_gss_data *gd,
 		       uint32_t flags)
@@ -120,6 +148,9 @@ unref_svc_rpc_gss_data(struct svc_rpc_gss_data *gd,
 	bool gd_locked = flags & SVC_RPC_GSS_FLAG_LOCKED;
 
 	refcnt = atomic_dec_uint32_t(&gd->refcnt);
+
+	 __warnx(TIRPC_DEBUG_FLAG_SVC, "ML: gd: %p, gd->refcnt: %u", gd, refcnt);
+	ntirpc_gsh_backtrace();
 
 	/* if refcnt is 0, gd is not reachable */
 	if (unlikely(refcnt == 0)) {
@@ -140,7 +171,7 @@ unref_svc_rpc_gss_data(struct svc_rpc_gss_data *gd,
 }
 
 struct svc_rpc_gss_data *authgss_ctx_hash_get(struct rpc_gss_cred *gc);
-bool authgss_ctx_hash_set(struct svc_rpc_gss_data *gd);
+struct opr_rbtree_node * authgss_ctx_hash_set(struct svc_rpc_gss_data *gd);
 bool authgss_ctx_hash_del(struct svc_rpc_gss_data *gd);
 
 bool svcauth_gss_acquire_cred(void);

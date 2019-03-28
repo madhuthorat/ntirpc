@@ -173,13 +173,13 @@ authgss_ctx_hash_get(struct rpc_gss_cred *gc)
 	return (gd);
 }
 
-bool
+struct opr_rbtree_node *
 authgss_ctx_hash_set(struct svc_rpc_gss_data *gd)
 {
 	struct rbtree_x_part *t;
 	struct authgss_x_part *axp;
 	gss_union_ctx_id_desc *gss_ctx;
-	bool rslt;
+	struct opr_rbtree_node *rslt;
 
 	cond_init_authgss_hash();
 

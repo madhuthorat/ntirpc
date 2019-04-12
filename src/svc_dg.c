@@ -399,6 +399,7 @@ static bool
 svc_dg_reply(struct svc_req *req)
 {
 	SVCXPRT *xprt = req->rq_xprt;
+
 	struct rpc_dplx_rec *rec = REC_XPRT(xprt);
 	struct svc_dg_xprt *su = DG_DR(rec);
 	XDR *xdrs = &(su->su_xdrs);

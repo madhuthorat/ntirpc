@@ -177,6 +177,7 @@ svc_xprt_lookup(int fd, svc_xprt_setup_t setup)
 			/* Get ref for caller */
 			SVC_REF(xprt, SVC_REF_FLAG_NONE);
 
+			 __warnx(TIRPC_DEBUG_FLAG_ERROR, "%s() Created xprt: %p fd: %d", __func__, xprt, xprt->xp_fd);
 			rec = REC_XPRT(xprt);
 			rpc_dplx_rli(rec);
 			if (opr_rbtree_insert(&t->t, &rec->fd_node)) {
@@ -195,6 +196,7 @@ svc_xprt_lookup(int fd, svc_xprt_setup_t setup)
 	}
 	rec = opr_containerof(nv, struct rpc_dplx_rec, fd_node);
 	xprt = &rec->xprt;
+	__warnx(TIRPC_DEBUG_FLAG_ERROR, "%s() Using xprt: %p fd: %d", __func__, xprt, xprt->xp_fd);
 
 	/* lookup reference before unlock ensures shutdown cannot release */
 	SVC_REF(xprt, SVC_REF_FLAG_NONE);
@@ -213,6 +215,7 @@ svc_xprt_lookup(int fd, svc_xprt_setup_t setup)
 		return (xprt);
 	}
 
+	__warnx(TIRPC_DEBUG_FLAG_ERROR, "%s() Destroying xprt: %p fd: %d", __func__, xprt, xprt->xp_fd);
 	/* unlock before release permits releasing here after destroy */
 	rpc_dplx_rui(rec);
 	SVC_RELEASE(xprt, SVC_RELEASE_FLAG_NONE);

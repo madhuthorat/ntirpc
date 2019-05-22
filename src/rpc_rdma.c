@@ -1367,6 +1367,8 @@ rpc_rdma_allocate(const struct rpc_rdma_attr *xa)
 
 	xd->sm_dr.xprt.xp_type = XPRT_RDMA;
 	xd->sm_dr.xprt.xp_refcnt = 1;
+	__warnx(TIRPC_DEBUG_FLAG_ERROR, "%s() Set xprt: %p fd: %d refcnt: 1",
+                __func__, &xd->sm_dr.xprt, xd->sm_dr.xprt.xp_fd);
 	xd->sm_dr.xprt.xp_ops = &rpc_rdma_ops;
 
 	xd->xa = xa;

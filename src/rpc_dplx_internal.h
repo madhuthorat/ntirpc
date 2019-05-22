@@ -120,6 +120,8 @@ rpc_dplx_rec_init(struct rpc_dplx_rec *rec)
 	(void)clock_gettime(CLOCK_MONOTONIC_FAST, &(rec->recv.ts));
 
 	rec->xprt.xp_refcnt = 1;
+	__warnx(TIRPC_DEBUG_FLAG_ERROR, "%s() Set xprt: %p fd: %d refcnt: 1",
+		__func__, &rec->xprt, rec->xprt.xp_fd);
 }
 
 static inline void

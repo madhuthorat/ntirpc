@@ -151,6 +151,8 @@ svc_ioq_flushv(SVCXPRT *xprt, struct xdr_ioq *xioq)
 		ix++;
 	}
 
+	__warnx(TIRPC_DEBUG_FLAG_ERROR, "%s() entering while() for xprt: %p fd: %d with remaining: %ld",
+		__func__, xprt, xprt->xp_fd, remaining);
 	while (remaining > 0) {
 		if (iw == 0) {
 			/* new fragment header, determine last iov */
@@ -164,6 +166,9 @@ svc_ioq_flushv(SVCXPRT *xprt, struct xdr_ioq *xioq)
 				/* never happens, see ganesha FSAL_MAXIOSIZE */
 				if (unlikely(fbytes >= LAST_FRAG)) {
 					fbytes -= tiov->iov_len;
+					__warnx(TIRPC_DEBUG_FLAG_ERROR,
+					"%s() xprt: %p fd: %d fbytes: %ld",
+					__func__, xprt, xprt->xp_fd, fbytes);
 					break;
 				}
 			} /* for */
@@ -193,8 +198,8 @@ svc_ioq_flushv(SVCXPRT *xprt, struct xdr_ioq *xioq)
 		}
 		if (unlikely(result < 0)) {
 			__warnx(TIRPC_DEBUG_FLAG_ERROR,
-				"%s() writev failed (%d)\n",
-				__func__, errno);
+				"%s() xprt: %p fd: %d, writev failed (%d)\n",
+				__func__, xprt, xprt->xp_fd, errno);
 			SVC_DESTROY(xprt);
 			break;
 		}
@@ -206,6 +211,8 @@ svc_ioq_flushv(SVCXPRT *xprt, struct xdr_ioq *xioq)
 				tiov->iov_len -= result;
 				tiov->iov_base += result;
 				wiov = tiov;
+				__warnx(TIRPC_DEBUG_FLAG_ERROR,
+				"%s() xprt: %p fd: %d breaking for condition - tiov->iov_len > result", __func__, xprt, xprt->xp_fd);
 				break;
 			} else {
 				result -= tiov->iov_len;
@@ -231,6 +238,8 @@ svc_ioq_write(SVCXPRT *xprt, struct xdr_ioq *xioq, struct poolq_head *ifph)
 			svc_ioq_flushv(xprt, xioq);
 		}
 		SVC_RELEASE(xprt, SVC_RELEASE_FLAG_NONE);
+		__warnx(TIRPC_DEBUG_FLAG_ERROR, "%s() calling SVC_RELEASE for xprt: %p fd: %d",
+			__func__, xprt, xprt->xp_fd);
 		XDR_DESTROY(xioq->xdrs);
 
 		mutex_lock(&ifph->qmutex);

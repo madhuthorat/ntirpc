@@ -380,7 +380,9 @@ static inline void svc_ref_it(SVCXPRT *xprt, u_int flags,
 	int32_t refs =
 		atomic_inc_int32_t(&xprt->xp_refcnt);
 
-	__warnx(TIRPC_DEBUG_FLAG_ERROR, "%s() incremented xprt: %p, fd: %d refcnt: %d", __func__, xprt, xprt->xp_fd, refs);
+	if (refs == 1)
+		__warnx(TIRPC_DEBUG_FLAG_ERROR, "%s() incremented xprt: %p, fd: %d refcnt: 1",
+			__func__, xprt, xprt->xp_fd);
 	if (flags & SVC_REF_FLAG_LOCKED)  {
 		/* unlock before warning trace */
 		mutex_unlock(&xprt->xp_lock);
@@ -405,7 +407,6 @@ static inline void svc_release_it(SVCXPRT *xprt, u_int flags,
 	int32_t refs = atomic_dec_int32_t(&xprt->xp_refcnt);
 	uint16_t xp_flags;
 
-	__warnx(TIRPC_DEBUG_FLAG_ERROR, "%s() decremented xprt: %p, fd: %d refcnt: %d", __func__, xprt, xprt->xp_fd, refs);
 	if (flags & SVC_RELEASE_FLAG_LOCKED) {
 		/* unlock before warning trace */
 		mutex_unlock(&xprt->xp_lock);
@@ -420,6 +421,7 @@ static inline void svc_release_it(SVCXPRT *xprt, u_int flags,
 		return;
 	}
 
+	__warnx(TIRPC_DEBUG_FLAG_ERROR, "%s() decremented xprt: %p, fd: %d refcnt: 0", __func__, xprt, xprt->xp_fd);
 	/* enforce once-only semantic, trace others */
 	xp_flags = atomic_postset_uint16_t_bits(&xprt->xp_flags,
 						SVC_XPRT_FLAG_RELEASING);

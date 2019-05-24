@@ -117,7 +117,7 @@ svc_ioq_init(void)
 #define LAST_FRAG ((u_int32_t)(1 << 31))
 #define MAXALLOCA (256)
 
-static inline void
+static inline int
 svc_ioq_flushv(SVCXPRT *xprt, struct xdr_ioq *xioq)
 {
 	struct iovec *iov, *tiov, *wiov;
@@ -130,6 +130,7 @@ svc_ioq_flushv(SVCXPRT *xprt, struct xdr_ioq *xioq)
 	u_int32_t vsize = (xioq->ioq_uv.uvqh.qcount + 1) * sizeof(struct iovec);
 	int iw = 0;
 	int ix = 1;
+	int ret = 0;
 
 	if (unlikely(vsize > MAXALLOCA)) {
 		iov = mem_alloc(vsize);
@@ -151,8 +152,6 @@ svc_ioq_flushv(SVCXPRT *xprt, struct xdr_ioq *xioq)
 		ix++;
 	}
 
-	__warnx(TIRPC_DEBUG_FLAG_ERROR, "%s() entering while() for xprt: %p fd: %d with remaining: %ld",
-		__func__, xprt, xprt->xp_fd, remaining);
 	while (remaining > 0) {
 		if (iw == 0) {
 			/* new fragment header, determine last iov */
@@ -166,9 +165,7 @@ svc_ioq_flushv(SVCXPRT *xprt, struct xdr_ioq *xioq)
 				/* never happens, see ganesha FSAL_MAXIOSIZE */
 				if (unlikely(fbytes >= LAST_FRAG)) {
 					fbytes -= tiov->iov_len;
-					__warnx(TIRPC_DEBUG_FLAG_ERROR,
-					"%s() xprt: %p fd: %d fbytes: %ld",
-					__func__, xprt, xprt->xp_fd, fbytes);
+					ret = -1;
 					break;
 				}
 			} /* for */
@@ -197,9 +194,7 @@ svc_ioq_flushv(SVCXPRT *xprt, struct xdr_ioq *xioq)
 			continue;
 		}
 		if (unlikely(result < 0)) {
-			__warnx(TIRPC_DEBUG_FLAG_ERROR,
-				"%s() xprt: %p fd: %d, writev failed (%d)\n",
-				__func__, xprt, xprt->xp_fd, errno);
+			ret = errno;
 			SVC_DESTROY(xprt);
 			break;
 		}
@@ -211,8 +206,7 @@ svc_ioq_flushv(SVCXPRT *xprt, struct xdr_ioq *xioq)
 				tiov->iov_len -= result;
 				tiov->iov_base += result;
 				wiov = tiov;
-				__warnx(TIRPC_DEBUG_FLAG_ERROR,
-				"%s() xprt: %p fd: %d breaking for condition - tiov->iov_len > result", __func__, xprt, xprt->xp_fd);
+				ret = -3;
 				break;
 			} else {
 				result -= tiov->iov_len;
@@ -223,23 +217,27 @@ svc_ioq_flushv(SVCXPRT *xprt, struct xdr_ioq *xioq)
 	if (unlikely(vsize > MAXALLOCA)) {
 		mem_free(iov, vsize);
 	}
+	return ret;
 }
 
 static void
 svc_ioq_write(SVCXPRT *xprt, struct xdr_ioq *xioq, struct poolq_head *ifph)
 {
 	struct poolq_entry *have;
+	int ret = 0;
 
 	for (;;) {
 		/* do i/o unlocked */
 		if (svc_work_pool.params.thrd_max
 		 && !(xprt->xp_flags & SVC_XPRT_FLAG_DESTROYED)) {
 			/* all systems are go! */
-			svc_ioq_flushv(xprt, xioq);
+			ret = svc_ioq_flushv(xprt, xioq);
 		}
 		SVC_RELEASE(xprt, SVC_RELEASE_FLAG_NONE);
-		__warnx(TIRPC_DEBUG_FLAG_ERROR, "%s() calling SVC_RELEASE for xprt: %p fd: %d",
-			__func__, xprt, xprt->xp_fd);
+		if (ret != 0) {
+			__warnx(TIRPC_DEBUG_FLAG_ERROR, "%s() called SVC_RELEASE for xprt: %p fd: %d, ret: %d",
+				__func__, xprt, xprt->xp_fd, ret);
+		}
 		XDR_DESTROY(xioq->xdrs);
 
 		mutex_lock(&ifph->qmutex);

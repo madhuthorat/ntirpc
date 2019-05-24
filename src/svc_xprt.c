@@ -177,7 +177,8 @@ svc_xprt_lookup(int fd, svc_xprt_setup_t setup)
 			/* Get ref for caller */
 			SVC_REF(xprt, SVC_REF_FLAG_NONE);
 
-			 __warnx(TIRPC_DEBUG_FLAG_ERROR, "%s() Created xprt: %p fd: %d", __func__, xprt, xprt->xp_fd);
+//			 __warnx(TIRPC_DEBUG_FLAG_ERROR, "%s() Created xprt: %p fd: %d, refcnt: %d",
+//				 __func__, xprt, xprt->xp_fd, xprt->xp_refcnt);
 			rec = REC_XPRT(xprt);
 			rpc_dplx_rli(rec);
 			if (opr_rbtree_insert(&t->t, &rec->fd_node)) {

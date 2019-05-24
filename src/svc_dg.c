@@ -436,7 +436,7 @@ svc_dg_destroy_task(struct work_pool_entry *wpe)
 	SVCXPRT *xprt = &rec->xprt;
 	uint16_t xp_flags;
 
-	__warnx(TIRPC_DEBUG_FLAG_ERROR,
+	__warnx(TIRPC_DEBUG_FLAG_REFCNT,
 		"%s() %p fd %d xp_refcnt %" PRId32,
 		__func__, xprt, xprt->xp_fd, xprt->xp_refcnt);
 
@@ -481,7 +481,7 @@ svc_dg_destroy_it(SVCXPRT *xprt, u_int flags, const char *tag, const int line)
 		svc_rqst_xprt_unregister(xprt, flags);
 	}
 
-	__warnx(TIRPC_DEBUG_FLAG_ERROR,
+	__warnx(TIRPC_DEBUG_FLAG_REFCNT,
 		"%s() %p fd %d xp_refcnt %" PRId32 " @%s:%d",
 		__func__, xprt, xprt->xp_fd, xprt->xp_refcnt, tag, line);
 

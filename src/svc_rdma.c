@@ -225,7 +225,7 @@ svc_rdma_destroy(SVCXPRT *xprt, u_int flags, const char *tag, const int line)
 {
 	RDMAXPRT *xd = RDMA_DR(REC_XPRT(xprt));
 
-	__warnx(TIRPC_DEBUG_FLAG_ERROR,
+	__warnx(TIRPC_DEBUG_FLAG_REFCNT,
 		"%s() %p fd: %d xp_refcnt %" PRId32
 		" should actually destroy things @ %s:%d",
 		__func__, xprt, xprt->xp_fd, xprt->xp_refcnt, tag, line);

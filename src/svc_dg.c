@@ -222,6 +222,48 @@ svc_dg_stat(SVCXPRT *xprt)
 	return SVC_STAT(xprt->xp_parent);
 }
 
+static void svc_dg_set_pktinfo(struct cmsghdr *cmsg, SVCXPRT *xprt)
+{
+	/* Linux kernel may present IP_PKTINFO on AF_INET6 sockets.
+	 * In such a case, use IP_PKTINFO rather than IP6_PKTINFO
+	 *
+	 * Some kernels have a bug with using IP6_PKTINFO with
+	 * IPv4mapped addresses! See Linux kernel commit with
+	 * "ipv6: honor IPV6_PKTINFO with v4 mapped addresses on
+	 * sendmsg" subject.
+	 */
+
+	/* Here we use rq_daddr_len to differentiate IP_PKTINFO vs
+	 * IP6_PKTINFO. Hopefully the rq_daddr_len is different for IPv4
+	 * vs IPv6.
+	 */
+	if (xprt->xp_local.nb.len == sizeof(struct sockaddr_in)) {
+		struct in_pktinfo *pki = (struct in_pktinfo *)CMSG_DATA(cmsg);
+		struct sockaddr_in *daddr =
+			(struct sockaddr_in *)&xprt->xp_local.ss;
+
+		cmsg->cmsg_level = SOL_IP;
+		cmsg->cmsg_type = IP_PKTINFO;
+		pki->ipi_ifindex = 0;
+#ifdef __FreeBSD__
+		pki->ipi_addr = daddr->sin_addr;
+#else
+		pki->ipi_spec_dst = daddr->sin_addr;
+#endif
+		cmsg->cmsg_len = CMSG_LEN(sizeof(*pki));
+	} else {
+		struct in6_pktinfo *pki = (struct in6_pktinfo *)CMSG_DATA(cmsg);
+		struct sockaddr_in6 *daddr =
+			(struct sockaddr_in6 *)&xprt->xp_local.ss;
+
+		cmsg->cmsg_level = SOL_IPV6;
+		cmsg->cmsg_type = IPV6_PKTINFO;
+		pki->ipi6_ifindex = daddr->sin6_scope_id;
+		pki->ipi6_addr = daddr->sin6_addr;
+		cmsg->cmsg_len = CMSG_LEN(sizeof(*pki));
+	}
+}
+
 static enum xprt_stat
 svc_dg_rendezvous(SVCXPRT *xprt)
 {
@@ -382,8 +424,10 @@ svc_dg_reply(struct svc_req *req)
 	XDR *xdrs = rec->ioq.xdrs;
 	struct svc_dg_xprt *su = DG_DR(rec);
 	struct msghdr *msg = &su->su_msghdr;
+	struct cmsghdr *cmsg;
 	struct iovec iov;
 	size_t slen;
+	char buffer[SVC_CMSG_SIZE];
 
 	if (!xprt->xp_remote.nb.len) {
 		__warnx(TIRPC_DEBUG_FLAG_WARN,
@@ -416,7 +460,12 @@ svc_dg_reply(struct svc_req *req)
 	msg->msg_iovlen = 1;
 	msg->msg_name = (struct sockaddr *)&xprt->xp_remote.ss;
 	msg->msg_namelen = xprt->xp_remote.nb.len;
-	/* cmsg already set in svc_dg_rendezvous */
+
+	/* Set source IP address of the reply message in PKTINFO */
+	msg->msg_control = buffer;
+	cmsg = (struct cmsghdr *)msg->msg_control;
+	svc_dg_set_pktinfo(cmsg, xprt);
+	msg->msg_controllen = CMSG_ALIGN(cmsg->cmsg_len);
 
 	if (sendmsg(xprt->xp_fd, msg, 0) != (ssize_t) slen) {
 		__warnx(TIRPC_DEBUG_FLAG_ERROR,
@@ -596,6 +645,9 @@ svc_dg_enable_pktinfo(int fd, const struct __rpc_sockinfo *si)
 
 	case AF_INET6:
 #ifdef SOL_IP
+		/* IP6_PKTINFO doesn't work on IPv4 mapped packets, so
+		 * enable IP_PKTINFO on IPv6 sockets as well
+		 */
 		(void)setsockopt(fd, SOL_IP, IP_PKTINFO, &val, sizeof(val));
 #endif
 #ifdef SOL_IPV6
@@ -607,48 +659,57 @@ svc_dg_enable_pktinfo(int fd, const struct __rpc_sockinfo *si)
 }
 
 static int
-svc_dg_store_in_pktinfo(struct cmsghdr *cmsg, SVCXPRT *xprt)
+svc_dg_store_in_pktinfo(struct msghdr *msg, SVCXPRT *xprt)
 {
-	if (cmsg->cmsg_level == SOL_IP &&
-	    cmsg->cmsg_type == IP_PKTINFO &&
-	    cmsg->cmsg_len >= CMSG_LEN(sizeof(struct in_pktinfo))) {
-		struct in_pktinfo *pkti = (struct in_pktinfo *)
-						CMSG_DATA(cmsg);
-		struct sockaddr_in *daddr = (struct sockaddr_in *)
-						&xprt->xp_local.ss;
+	struct cmsghdr *cmsg;
 
-		daddr->sin_family = AF_INET;
+	for (cmsg = CMSG_FIRSTHDR(msg); cmsg != 0;
+			cmsg = CMSG_NXTHDR(msg, cmsg)) {
+		if (cmsg->cmsg_level == SOL_IP &&
+		    cmsg->cmsg_type == IP_PKTINFO &&
+		    cmsg->cmsg_len >= CMSG_LEN(sizeof(struct in_pktinfo))) {
+			struct in_pktinfo *pkti = (struct in_pktinfo *)
+							CMSG_DATA(cmsg);
+			struct sockaddr_in *daddr = (struct sockaddr_in *)
+							&xprt->xp_local.ss;
+
+			daddr->sin_family = AF_INET;
 #ifdef __FreeBSD__
-		daddr->sin_addr = pkti->ipi_addr;
+			daddr->sin_addr = pkti->ipi_addr;
 #else
-		daddr->sin_addr.s_addr = pkti->ipi_spec_dst.s_addr;
+			daddr->sin_addr.s_addr = pkti->ipi_spec_dst.s_addr;
 #endif
-		xprt->xp_local.nb.len = sizeof(struct sockaddr_in);
-		return 1;
-	} else {
-		return 0;
+			xprt->xp_local.nb.len = sizeof(struct sockaddr_in);
+			return 1;
+		}
 	}
+
+	return 0;
 }
 
 static int
-svc_dg_store_in6_pktinfo(struct cmsghdr *cmsg, SVCXPRT *xprt)
+svc_dg_store_in6_pktinfo(struct msghdr *msg, SVCXPRT *xprt)
 {
-	if (cmsg->cmsg_level == SOL_IPV6 &&
-	    cmsg->cmsg_type == IPV6_PKTINFO &&
-	    cmsg->cmsg_len >= CMSG_LEN(sizeof(struct in6_pktinfo))) {
-		struct in6_pktinfo *pkti = (struct in6_pktinfo *)
-						CMSG_DATA(cmsg);
-		struct sockaddr_in6 *daddr = (struct sockaddr_in6 *)
-						&xprt->xp_local.ss;
+	struct cmsghdr *cmsg;
 
-		daddr->sin6_family = AF_INET6;
-		daddr->sin6_addr = pkti->ipi6_addr;
-		daddr->sin6_scope_id = pkti->ipi6_ifindex;
-		xprt->xp_local.nb.len = sizeof(struct sockaddr_in6);
-		return 1;
-	} else {
-		return 0;
+	for (cmsg = CMSG_FIRSTHDR(msg); cmsg != 0;
+			cmsg = CMSG_NXTHDR(msg, cmsg)) {
+		if (cmsg->cmsg_level == SOL_IPV6 &&
+		    cmsg->cmsg_type == IPV6_PKTINFO &&
+		    cmsg->cmsg_len >= CMSG_LEN(sizeof(struct in6_pktinfo))) {
+			struct in6_pktinfo *pkti = (struct in6_pktinfo *)
+							CMSG_DATA(cmsg);
+			struct sockaddr_in6 *daddr = (struct sockaddr_in6 *)
+							&xprt->xp_local.ss;
+
+			daddr->sin6_family = AF_INET6;
+			daddr->sin6_addr = pkti->ipi6_addr;
+			daddr->sin6_scope_id = pkti->ipi6_ifindex;
+			xprt->xp_local.nb.len = sizeof(struct sockaddr_in6);
+			return 1;
+		}
 	}
+	return 0;
 }
 
 /*
@@ -659,22 +720,16 @@ svc_dg_store_in6_pktinfo(struct cmsghdr *cmsg, SVCXPRT *xprt)
 static int
 svc_dg_store_pktinfo(struct msghdr *msg, SVCXPRT *xprt)
 {
-	struct cmsghdr *cmsg;
-
 	if (!msg->msg_name)
 		return 0;
 
 	if (msg->msg_flags & MSG_CTRUNC)
 		return 0;
 
-	cmsg = CMSG_FIRSTHDR(msg);
-	if (cmsg == NULL || CMSG_NXTHDR(msg, cmsg) != NULL)
-		return 0;
-
 	switch (((struct sockaddr *)msg->msg_name)->sa_family) {
 	case AF_INET:
 #ifdef SOL_IP
-		if (svc_dg_store_in_pktinfo(cmsg, xprt))
+		if (svc_dg_store_in_pktinfo(msg, xprt))
 			return 1;
 #endif
 		break;
@@ -682,11 +737,11 @@ svc_dg_store_pktinfo(struct msghdr *msg, SVCXPRT *xprt)
 	case AF_INET6:
 #ifdef SOL_IP
 		/* Handle IPv4 PKTINFO as well on IPV6 interface */
-		if (svc_dg_store_in_pktinfo(cmsg, xprt))
+		if (svc_dg_store_in_pktinfo(msg, xprt))
 			return 1;
 #endif
 #ifdef SOL_IPV6
-		if (svc_dg_store_in6_pktinfo(cmsg, xprt))
+		if (svc_dg_store_in6_pktinfo(msg, xprt))
 			return 1;
 #endif
 		break;

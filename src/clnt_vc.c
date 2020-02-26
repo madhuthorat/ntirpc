@@ -208,6 +208,16 @@ clnt_vc_ncreatef(const int fd,	/* open file descriptor */
 		clnt->cl_error.re_status = RPC_TLIERROR;
 		goto err;
 	}
+
+	/* Workaround: Take an extra ref for the xprt, so that in case xprt
+	 * times out and svc_rqst_clean_func() drops a ref, then refcnt for the
+	 * xprt won't become 1 and thus epoll won't be able to drop a ref for
+	 * the xprt. This will help to avoid the chance of freeing up memory for
+	 * the xprt, in case the xprt times out. We drop the extra ref taken
+	 * here in clnt_vc_destroy().
+	 */
+	SVC_REF(xprt, SVC_REF_FLAG_NONE);
+
 	xd = VC_DR(REC_XPRT(xprt));
 
 	if (!xd->sx_dr.ev_p) {
@@ -459,8 +469,15 @@ clnt_vc_destroy(CLIENT *clnt)
 	struct cx_data *cx = CX_DATA(clnt);
 
 	if (cx->cx_rec) {
-		/* SVC_RELEASE may free the object, so call SVC_DESTROY
-		 * first. SVC_DESTROY() sets up things for eventual
+		/* Workaround: Drop the extra ref taken for the xprt in
+		 * clnt_vc_ncreatef(). Note, dropping a ref here won't lead to
+		 * freeing the memory for the xprt. Check clnt_vc_ncreatef()
+		 * for more details about the workaround.
+		 */
+		SVC_RELEASE(&cx->cx_rec->xprt, SVC_RELEASE_FLAG_NONE);
+
+		/* The below SVC_RELEASE may free the object, so call
+		 * SVC_DESTROY first. SVC_DESTROY() sets up things for eventual
 		 * destruction but SVC_RELEASE may actually free the
 		 * memory!
 		 */

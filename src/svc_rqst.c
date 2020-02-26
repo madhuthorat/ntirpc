@@ -49,6 +49,7 @@
 #include "clnt_internal.h"
 #include "svc_internal.h"
 #include "svc_xprt.h"
+#include <syslog.h>
 
 /**
  * @file svc_rqst.c
@@ -798,6 +799,8 @@ svc_rqst_clean_func(SVCXPRT *xprt, void *arg)
 		return (false);
 
 	SVC_DESTROY(xprt);
+	if (xprt->xp_xtraref)
+		syslog(LOG_ERR, "Timed out xprt: %p", xprt);
 	acc->cleaned++;
 	return (true);
 }

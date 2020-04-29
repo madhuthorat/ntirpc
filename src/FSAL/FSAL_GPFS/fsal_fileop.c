@@ -84,6 +84,7 @@ GPFSFSAL_open(struct fsal_obj_handle *obj_hdl,
 		/** Try open as root access if the above call fails,
 		 * permission will be checked somewhere else in the code.
 		 */
+		LogEvent(COMPONENT_FSAL, "HERE");
 		status = fsal_internal_handle2fd(export_fd,
 						 myself->handle,
 						 file_desc, posix_flags);
